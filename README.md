@@ -1,19 +1,10 @@
 # Nethereum bflat-riscv64
 
-Fork of [NethermindEth/bflat-riscv64](https://github.com/NethermindEth/bflat-riscv64) which is itself a fork of [MichalStrehovsky/bflat](https://github.com/bflattened/bflat) — a C# NativeAOT compiler.
+Fork of [NethermindEth/bflat-riscv64](https://github.com/NethermindEth/bflat-riscv64), originally from [MichalStrehovsky/bflat](https://github.com/bflattened/bflat).
 
-## Why this fork exists
+## Why this fork
 
-Running different C# programs on the same zkVM toolchain surfaces different bugs. Nethermind runs their [StatelessExecutor](https://github.com/NethermindEth/nethermind). We run the [Nethereum EVM](https://github.com/Nethereum/Nethereum) — a full Ethereum Virtual Machine with Patricia trie state roots, block proof generation, and 18/18 historical fork support from Frontier to Osaka.
-
-Different workloads stress different code paths. Our EVM execution immediately hit three issues that Nethermind's workload hadn't surfaced: a 33.8MB BSS overflow, an unresolved allocator symbol, and signal handler crashes. By maintaining this fork, we can:
-
-- **Discover and fix toolchain issues** as we develop independently
-- **Contribute fixes back** to Nethermind and upstream bflat
-- **Move fast** without waiting for upstream releases
-- **Document what we learn** for the broader .NET-on-zkVM community
-
-Every fix in this fork is a potential upstream PR. We're separate agents working on the same infrastructure — that's how the ecosystem improves.
+A place to work with different settings and fixes for the C# → RISC-V64 zkVM toolchain. Different programs surface different issues. Fixes here can help everyone — intended to be contributed back upstream.
 
 ## What's in this fork
 
