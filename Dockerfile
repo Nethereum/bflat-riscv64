@@ -12,7 +12,7 @@
 #
 # Based on NethermindEth/bflat-riscv64 (AGPL v3)
 # Nethermind patches: RISC-V modules, runtime helpers, OS abstraction
-# Nethereum patches: TSS reduction (33.8MB→64KB), calloc fix for Zisk
+# Nethereum patches: TSS reduction (33.8MB→64KB), calloc fix for Zisk (now upstreamed)
 # =============================================================================
 
 FROM ubuntu:24.04
@@ -39,7 +39,7 @@ ENV PATH="$PATH:/root/dotnet"
 
 # --- Pre-built runtime DLLs from NethermindEth/dotnet-riscv ---
 # Downloaded automatically by bflat's build system (bflat.csproj)
-# Version pinned in the csproj — currently v10.0.0.b17
+# Version pinned in the csproj — currently v10.0.0.b19
 
 # --- Copy our bflat source (with Nethereum patches) ---
 COPY . /build/bflat
