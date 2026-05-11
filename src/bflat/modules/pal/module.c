@@ -239,6 +239,24 @@ __wrap_pthread_sigmask(int how, void *set, void *oldset)
     return 0;
 }
 
+/*
+ * The real PalGetMaximumStackBounds() calls pthread_getattr_np() +
+ * pthread_attr_getstack() to probe the main thread's stack.  Under static musl
+ * that path invokes mremap(NULL, 0, 0, 0), which fails with EINVAL on RISC-V
+ * Linux and aborts runtime startup before Main().  Stack bounds are not used
+ * for anything meaningful in Zisk-targeted binaries, so report a synthetic
+ * 8 MiB window anchored at the current frame.
+ */
+int
+__wrap__Z24PalGetMaximumStackBoundsPPvS0_(void **stack_base, void **stack_limit)
+{
+    uintptr_t sp = (uintptr_t)__builtin_frame_address(0);
+
+    *stack_base  = (void *)((sp + 4095u) & ~(uintptr_t)4095u);
+    *stack_limit = (void *)((uintptr_t)*stack_base - (8u * 1024u * 1024u));
+    return 1;
+}
+
 int
 __wrap___clock_gettime(int clk, void *ts)
 {
@@ -373,7 +391,7 @@ __wrap_sysconf(int n)
 }
 
 void *
-__wrap__RNvNtNtCsakQiG9XjPeS_6ziskos5alloc5alloc25inline_bump_alloc_aligned(uint32_t bytes, uint32_t align)
+__wrap_inline_bump_alloc_aligned(uint32_t bytes, uint32_t align)
 {
     return __wrap___libc_malloc_impl(bytes);
 }

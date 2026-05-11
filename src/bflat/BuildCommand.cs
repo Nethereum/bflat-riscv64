@@ -130,6 +130,7 @@ internal class BuildCommand : CommandBase
     private static Option<bool> NoLinkOption = new Option<bool>("-c", "Produce object file, but don't run linker");
     private static Option<bool> MstatOption = new Option<bool>("--mstat", "Produce MSTAT and DGML files for size analysis");
     private static Option<bool> SymChartOption = new Option<bool>("--symchart", "Run readelf after linking and generate an HTML symbol-size chart");
+    private static Option<bool> WrapCheckOption = new Option<bool>("--wrap-check", "Verify every --wrap= linker flag points to a real symbol; fails the build if any is missing");
     private static Option<string[]> LdFlagsOption = new Option<string[]>(new string[] { "--ldflags" }, "Arguments to pass to the linker");
     private static Option<bool> PrintCommandsOption = new Option<bool>("-x", "Print the commands");
 
@@ -215,6 +216,7 @@ internal class BuildCommand : CommandBase
             CommonOptions.KeepObjectOption,
             ExtLibOption,
             SymChartOption,
+            WrapCheckOption,
         };
         command.Handler = new BuildCommand();
 
@@ -1453,7 +1455,7 @@ internal class BuildCommand : CommandBase
                 ldArgs.Append($"\"{Path.Combine(ziskLibPath, "stdcppshim.o")}\" ");
                 if (libc == "zisk")
                 {
-                    ldArgs.Append($"--wrap=_RNvNtNtCsakQiG9XjPeS_6ziskos5alloc5alloc25inline_bump_alloc_aligned ");
+                    ldArgs.Append($"--wrap=inline_bump_alloc_aligned ");
                 }
                 /* rhp */
                 ldArgs.Append($"\"{Path.Combine(ziskLibPath, "rhp.o")}\" ");
@@ -1470,7 +1472,7 @@ internal class BuildCommand : CommandBase
                 ldArgs.Append($"--wrap=RhGetThreadStaticStorage ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_Internal_Runtime_ThreadStatics__GetUninlinedThreadStaticBaseForType ");
                 ldArgs.Append($"--wrap=_Z16InitializeCGroupv ");
-                ldArgs.Append($"--wrap=S_P_CoreLib_Internal_Runtime_CompilerHelpers_StartupCodeHelpers__InitializeCommandLineArgs ");
+                ldArgs.Append($"--wrap=_Z19InitializeCpuCGroupv ");
                 ldArgs.Append($"--wrap=__GetNonGCStaticBase_S_P_CoreLib_System_Environment ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Thread__WaitForForegroundThreads ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Lock__Enter ");
@@ -1482,12 +1484,13 @@ internal class BuildCommand : CommandBase
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Lock__Exit_0 ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Lock__Exit_1 ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Lock__ExitAll ");
-                //ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Lock__get_IsHeldByCurrentThread ");
+                ldArgs.Append($"--wrap=S_P_TypeLoader_Internal_Runtime_TypeLoader_TypeLoaderEnvironment__VerifyTypeLoaderLockHeld ");
                 //ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_ManagedThreadId__get_Current ");
                 //ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Monitor__Enter ");
                 //ldArgs.Append($"--wrap=S_P_CoreLib_System_Threading_Monitor__Exit ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_Number__UInt32ToDecStrForKnownSmallNumber ");
                 ldArgs.Append($"--wrap=_ZN6Thread10IsDetachedEv ");
+                ldArgs.Append($"--wrap=_Z24PalGetMaximumStackBoundsPPvS0_ ");
                 if (libc == "zisk")
                 {
                     ldArgs.Append($"--wrap=System_Console_Interop_Sys__InitializeTerminalAndSignalHandling ");
@@ -1496,6 +1499,10 @@ internal class BuildCommand : CommandBase
                 }
                 ldArgs.Append($"--wrap=RhpThrowEx ");
                 ldArgs.Append($"--wrap=S_P_CoreLib_System_RuntimeExceptionHelpers__FailFast ");
+
+                /* gs_cookie */
+                ldArgs.Append($"\"{Path.Combine(ziskLibPath, "gs_cookie.o")}\" ");
+                ldArgs.Append($"--wrap=__security_cookie ");
 
                 /* rhp_native */
                 ldArgs.Append($"\"{Path.Combine(ziskLibPath, "rhp_native.o")}\" ");
@@ -1548,6 +1555,8 @@ internal class BuildCommand : CommandBase
                 /* rng */
                 ldArgs.Append($"\"{Path.Combine(ziskLibPath, "rng_stupid.o")}\" ");
                 ldArgs.Append($"--wrap=minipal_get_cryptographically_secure_random_bytes ");
+                ldArgs.Append($"--wrap=CryptoNative_EnsureOpenSslInitialized ");
+                ldArgs.Append($"--wrap=CryptoNative_GetRandomBytes ");
 
                 /* rust_sys */
                 ldArgs.Append($"\"{Path.Combine(ziskLibPath, "rust_sys.o")}\" ");
@@ -1579,13 +1588,21 @@ internal class BuildCommand : CommandBase
             return p.ExitCode;
         }
 
+        if (targetOS == TargetOS.Linux && result.GetValueForOption(WrapCheckOption))
+        {
+            string checkWrapPath = Path.Combine(homePath, "check_wrap_symbols.py");
+            int checkExitCode = RunCommand(checkWrapPath, "-- " + ldArgs.ToString(), printCommands);
+            if (checkExitCode != 0)
+                return checkExitCode;
+        }
+
         PerfWatch linkWatch = new PerfWatch("Link");
         int exitCode = RunCommand(ld, ldArgs.ToString(), printCommands);
         linkWatch.Complete();
 
         if (libc == "zisk" && exitCode == 0)
         {
-            var patchElfArgs = " --fix-init-array --fix-tdata --split-code-data --remove-eh ";
+            var patchElfArgs = " --fix-init-array --fix-tdata --remove-eh --trim-bss ";
             if (verbose)
                 patchElfArgs += "--print-fn-boundaries ";
 

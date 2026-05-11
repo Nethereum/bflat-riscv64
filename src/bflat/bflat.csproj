@@ -68,6 +68,12 @@
     <_CompilerNupkgName>bflat.compiler.$(RuntimeVersion).nupkg</_CompilerNupkgName>
     <_LocalPackagesDir>$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'packages'))</_LocalPackagesDir>
     <_CompilerNupkgLocalPath>$([MSBuild]::NormalizePath('$(_LocalPackagesDir)', '$(_CompilerNupkgName)'))</_CompilerNupkgLocalPath>
+    <!-- Marker file recording which BlobsVersion produced the cached nupkg.
+         _CompilerNupkgName itself does not include BlobsVersion (NuGet
+         requires the canonical filename), so we track the active blob set
+         via this sidecar file. When BlobsVersion changes, the marker
+         disappears and DownloadCompilerNupkg re-fetches. -->
+    <_CompilerNupkgVersionMarker>$(_CompilerNupkgLocalPath).$(BlobsVersion).version</_CompilerNupkgVersionMarker>
   </PropertyGroup>
 
   <Target Name="CreateCompilerLayout"
@@ -126,6 +132,10 @@
     <Copy SourceFiles="$(MSBuildThisFileDirectory)modules\security-stub\module.o"
           DestinationFiles="$(OutputPath)lib\linux\riscv64\zisk\security-stub.o" />
 
+    <!-- gs_cookie -->
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)modules\gs_cookie\module.o"
+          DestinationFiles="$(OutputPath)lib\linux\riscv64\zisk\gs_cookie.o" />
+
     <!-- stdcppshim -->
     <Copy SourceFiles="$(MSBuildThisFileDirectory)modules\stdcppshim\module.o"
           DestinationFiles="$(OutputPath)lib\linux\riscv64\zisk\stdcppshim.o" />
@@ -155,6 +165,8 @@
     <!-- patch-elf script -->
     <Copy SourceFiles="$(MSBuildThisFileDirectory)scripts\patch_elf.py"
           DestinationFiles="$(OutputPath)patch_elf.py" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)scripts\check_wrap_symbols.py"
+          DestinationFiles="$(OutputPath)check_wrap_symbols.py" />
   </Target>
 
   <Target Name="DownloadRuntimeArtifacts"
@@ -187,11 +199,20 @@
   -->
   <Target Name="DownloadCompilerNupkg"
           BeforeTargets="Restore"
-          Condition="!Exists('$(_CompilerNupkgLocalPath)')">
+          Condition="!Exists('$(_CompilerNupkgLocalPath)') or !Exists('$(_CompilerNupkgVersionMarker)')">
 
-    <Message Text="Downloading $(_CompilerNupkgName) ..." Importance="High" />
+    <Message Text="Downloading $(_CompilerNupkgName) (BlobsVersion=$(BlobsVersion)) ..." Importance="High" />
 
     <MakeDir Directories="$(_LocalPackagesDir)" />
+
+    <!-- Drop the cached nupkg and any stale version markers; the marker for
+         the previous BlobsVersion is no longer authoritative. -->
+    <Delete Files="$(_CompilerNupkgLocalPath)"
+            Condition="Exists('$(_CompilerNupkgLocalPath)')" />
+    <ItemGroup>
+      <_StaleVersionMarkers Include="$(_LocalPackagesDir)/$(_CompilerNupkgName).*.version" />
+    </ItemGroup>
+    <Delete Files="@(_StaleVersionMarkers)" />
 
     <DownloadFile SourceUrl="$(BlobsUri)v$(BlobsVersion)/$(_CompilerNupkgName)"
                   Retries="3"
@@ -210,6 +231,7 @@
     <RemoveDir Directories="$(_NuGetCacheEntry)"
                Condition="Exists('$(_NuGetCacheEntry)')" />
 
+    <Touch Files="$(_CompilerNupkgVersionMarker)" AlwaysCreate="true" />
   </Target>
 
   <Target Name="ExtractHostCompiler"
